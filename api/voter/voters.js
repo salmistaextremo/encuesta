@@ -1,8 +1,17 @@
-import { redis, KEYS, getConfig, getSongs, send, withErrorHandler } from '../_lib.js';
+import { redis, KEYS, getConfig, getSongs, send, withErrorHandler } from '../../_lib.js';
 
 export default withErrorHandler(async (req, res) => {
-  if (req.method !== 'GET') return send(res, 405, { error: 'Method not allowed' });
+  // Si es DELETE (eliminar votante)
+  if (req.method === 'DELETE') {
+    // La autenticación la maneja el admin, aquí solo borramos
+    const { token } = req.query;
+    if (!token) return send(res, 400, { error: 'Token requerido' });
+    await Promise.all([redis.hdel(KEYS.voters, token), redis.hdel(KEYS.votes, token)]);
+    return send(res, 200, { ok: true });
+  }
 
+  // Si es GET (el votante abre su enlace)
+  if (req.method !== 'GET') return send(res, 405, { error: 'Method not allowed' });
   const { token } = req.query;
   if (!token) return send(res, 400, { error: 'Token requerido' });
 
@@ -15,12 +24,15 @@ export default withErrorHandler(async (req, res) => {
 
   if (!voterRaw) return send(res, 404, { error: 'Enlace inválido o expirado' });
 
-  // Fix: Convertir de JSON string a objeto si es necesario
-  const voter = typeof voterRaw === 'string' ? JSON.parse(voterRaw) : voterRaw;
+  let voter = voterRaw;
+  if (typeof voterRaw === 'string') {
+    try { voter = JSON.parse(voterRaw); } catch (e) {}
+  }
+
   const ended = new Date() >= new Date(cfg.deadline);
 
   send(res, 200, {
-    name: voter.name,
+    name: voter.name || 'Votante',
     voted: !!hasVoted,
     ended,
     deadline: cfg.deadline,
