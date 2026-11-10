@@ -1,5 +1,8 @@
 import crypto from 'crypto';
-import { redis, KEYS, send, checkAuth, parseBody, withErrorHandler, getConfig } from '../_lib.js';
+import {
+  redis, KEYS, getConfig, send, checkAuth, parseBody, withErrorHandler,
+} from '../_lib.js';
+
 export default withErrorHandler(async (req, res) => {
   if (!(await checkAuth(req, res))) return;
 
@@ -39,7 +42,10 @@ export default withErrorHandler(async (req, res) => {
     for (const raw of names) {
       const name = String(raw).trim();
       if (!name || existingNames.has(name.toLowerCase())) continue;
+      
+      // Genera un código único, ej: "aB3xY9z"
       const token = crypto.randomBytes(9).toString('base64url');
+      
       await redis.hset(KEYS.voters, token, { name, token });
       existingNames.add(name.toLowerCase());
       created.push({ name, token, link: `/v/${token}` });
