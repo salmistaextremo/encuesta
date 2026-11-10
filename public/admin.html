@@ -17,9 +17,6 @@
       <h3>🔐 Ingreso</h3>
       <input id="pass" type="password" placeholder="Contraseña de administrador" />
       <div class="row"><button class="btn primary" id="loginBtn">Entrar</button></div>
-      <p style="color:var(--muted);font-size:12px;margin-top:10px">
-        Contraseña inicial definida en la env var <code>ADMIN_PASSWORD</code>.
-      </p>
     </div>
 
     <div id="app" style="display:none">
@@ -81,7 +78,6 @@ async function login() {
     $('#app').style.display = 'block';
     loadData(r);
   } catch (e) {
-    // Si el error es de autenticación, avisar. Si es de red, avisar también.
     alert('Contraseña incorrecta o error de red.');
   }
 }
@@ -93,19 +89,23 @@ async function api(method, url, body) {
     body: body ? JSON.stringify(body) : undefined
   });
   if (r.status === 401) throw new Error('auth');
-  return r.json();
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'Error');
+  return data;
 }
 
 function loadData({ deadline, voters }) {
+  const safeVoters = voters || [];
+  
+  // Arreglo de fecha para que no rompa el panel si viene vacía
   const dl = new Date(deadline || Date.now() + 7 * 24 * 3600 * 1000);
   const tz = new Date(dl.getTime() - dl.getTimezoneOffset() * 60000).toISOString().slice(0,16);
   $('#deadline').value = tz;
 
-  const safeVoters = voters || [];
-$('#voterCount').textContent = `(${safeVoters.length} · ${safeVoters.filter(v => v.voted).length} votaron)`;
-  allLinks = voters.map(v => `${location.origin}${v.link}`);
+  $('#voterCount').textContent = `(${safeVoters.length} · ${safeVoters.filter(v => v.voted).length} votaron)`;
+  allLinks = safeVoters.map(v => `${location.origin}${v.link}`);
 
-  $('#voterTable').innerHTML = voters.map(v => `
+  $('#voterTable').innerHTML = safeVoters.map(v => `
     <tr>
       <td>${esc(v.name)}</td>
       <td><a href="${v.link}" target="_blank" style="color:var(--accent-2);font-size:12px">${location.origin}${v.link}</a></td>
@@ -117,8 +117,12 @@ $('#voterCount').textContent = `(${safeVoters.length} · ${safeVoters.filter(v =
   $('#voterTable').querySelectorAll('[data-token]').forEach(btn => {
     btn.onclick = async () => {
       if (!confirm('¿Eliminar este votante?')) return;
-      await api('DELETE', '/api/voter/voters/' + btn.dataset.token);
-      loadData(await api('GET', '/api/admin/voters'));
+      try {
+        await api('DELETE', '/api/voter/voters/' + btn.dataset.token);
+        loadData(await api('GET', '/api/admin/voters'));
+      } catch (e) {
+        alert('Error al eliminar: ' + e.message);
+      }
     };
   });
 }
@@ -126,9 +130,13 @@ $('#voterCount').textContent = `(${safeVoters.length} · ${safeVoters.filter(v =
 $('#addBtn').onclick = async () => {
   const names = $('#names').value.split(/\n|,/).map(s => s.trim()).filter(Boolean);
   if (!names.length) return alert('Escribe al menos un nombre');
-  await api('POST', '/api/admin/voters', { names });
-  $('#names').value = '';
-  loadData(await api('GET', '/api/admin/voters'));
+  try {
+    await api('POST', '/api/admin/voters', { names });
+    $('#names').value = '';
+    loadData(await api('GET', '/api/admin/voters'));
+  } catch (e) {
+    alert('Error al generar enlaces: ' + e.message);
+  }
 };
 
 $('#copyAllBtn').onclick = () => {
@@ -140,10 +148,14 @@ $('#copyAllBtn').onclick = () => {
 $('#saveCfg').onclick = async () => {
   const deadline = new Date($('#deadline').value).toISOString();
   const adminPassword = $('#newPass').value.trim() || undefined;
-  await api('POST', '/api/admin/config', { deadline, adminPassword });
-  if (adminPassword) pass = adminPassword;
-  $('#newPass').value = '';
-  alert('✅ Configuración guardada');
+  try {
+    await api('POST', '/api/admin/config', { deadline, adminPassword });
+    if (adminPassword) pass = adminPassword;
+    $('#newPass').value = '';
+    alert('✅ Configuración guardada');
+  } catch (e) {
+    alert('Error al guardar: ' + e.message);
+  }
 };
 
 $('#previewBtn').onclick = () => {
@@ -152,8 +164,13 @@ $('#previewBtn').onclick = () => {
 
 $('#resetVotes').onclick = async () => {
   if (!confirm('⚠️ Se borrarán TODOS los votos. ¿Continuar?')) return;
-  await api('POST', '/api/admin/reset-votes');
-  loadData(await api('GET', '/api/admin/voters'));
+  try {
+    await api('POST', '/api/admin/reset-votes');
+    loadData(await api('GET', '/api/admin/voters'));
+    alert('✅ Votos borrados');
+  } catch (e) {
+    alert('Error al borrar: ' + e.message);
+  }
 };
 </script>
 </body>
