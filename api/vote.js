@@ -11,7 +11,9 @@ export default withErrorHandler(async (req, res) => {
     return send(res, 429, { error: 'Demasiadas solicitudes' });
   }
 
-  const { token, songIds } = parseBody(req);
+  const { token, songIds, name } = parseBody(req);
+
+
   if (!token || !Array.isArray(songIds)) {
     return send(res, 400, { error: 'Datos inválidos' });
   }
@@ -37,10 +39,11 @@ export default withErrorHandler(async (req, res) => {
   }
 
   const voteData = {
-    at: new Date().toISOString(),
-    songIds: [...songIds],
-    ip,
-  };
+  at: new Date().toISOString(),
+  songIds: [...songIds],
+  ip,
+  name: name || 'Votante'
+};
 
   // HSETNX atómico — 1 si se creó, 0 si ya existía
   const created = await redis.hsetnx(KEYS.votes, token, voteData);
