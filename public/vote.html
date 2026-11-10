@@ -47,21 +47,28 @@
   </div>
 
 <script>
+// Extraer el token de la URL (ej: /v/ABC123)
 const token = location.pathname.split('/').filter(Boolean).pop();
+// Extraer el nombre de la URL (ej: ?name=Juan)
 const urlParams = new URLSearchParams(window.location.search);
 const voterNameFromUrl = urlParams.get('name') || 'Votante';
+
 const $ = sel => document.querySelector(sel);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 let allSongs = [], selected = new Set(), deadline = null;
 
+// 1. INICIAR LA PÁGINA
 (async function boot() {
   try {
-    const r = await fetch('/api/voter/' + encodeURIComponent(token));
+    // Llamamos a la ruta correcta de la API
+    const r = await fetch('/api/voter/voters?token=' + encodeURIComponent(token) + '&name=' + encodeURIComponent(voterNameFromUrl));
+    
     if (!r.ok) return showError('Enlace inválido o expirado');
+    
     const data = await r.json();
-    allSongs = data.songs;
+    allSongs = data.songs || [];
     deadline = new Date(data.deadline);
     $('#voterName').textContent = data.name;
 
@@ -76,6 +83,7 @@ let allSongs = [], selected = new Set(), deadline = null;
   }
 })();
 
+// 2. MOSTRAR CANCIONES
 function render() {
   const q = ($('#search').value || '').toLowerCase().trim();
   const sort = $('#sort').value;
@@ -100,6 +108,7 @@ function render() {
   });
 }
 
+// 3. SELECCIONAR CANCIONES
 function toggle(id) {
   if (selected.has(id)) selected.delete(id);
   else {
@@ -123,6 +132,7 @@ function updateCounter() {
   $('#submitBtn').disabled = selected.size !== 50;
 }
 
+// 4. CONTROLES
 function wireControls() {
   $('#search').addEventListener('input', render);
   $('#sort').addEventListener('change', render);
@@ -133,6 +143,7 @@ function wireControls() {
   $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
 }
 
+// 5. ENVIAR EL VOTO
 async function submitVote() {
   if (selected.size !== 50) return;
   const btn = $('#submitBtn');
@@ -141,6 +152,7 @@ async function submitVote() {
     const r = await fetch('/api/vote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      // Enviamos el token, las canciones y el nombre
       body: JSON.stringify({ token, songIds: [...selected], name: voterNameFromUrl })
     });
     const data = await r.json();
@@ -152,6 +164,7 @@ async function submitVote() {
   }
 }
 
+// 6. PANTALLAS DE ESTADO
 function showThankYou(name) {
   $('#footer').style.display = 'none';
   $('#main').innerHTML = `
@@ -182,6 +195,7 @@ function showError(msg) {
   $('#footer').style.display = 'none';
 }
 
+// 7. MODAL DE RESULTADOS
 async function openResults() {
   $('#modal').classList.remove('hidden');
   $('#modalContent').innerHTML = `<div class="countdown"><p>Cargando…</p></div>`;
