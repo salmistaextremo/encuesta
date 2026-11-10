@@ -198,7 +198,7 @@ $('#saveCfg').onclick = async () => {
 };
 
 $('#previewBtn').onclick = () => {
-  window.open('/api/results?force=1&pass=' + encodeURIComponent(pass), '_blank');
+  window.open('/results?preview=1&pass=' + encodeURIComponent(pass), '_blank');
 };
 
 $('#resetVotes').onclick = async () => {
