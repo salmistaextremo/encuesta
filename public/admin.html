@@ -20,17 +20,33 @@
     </div>
 
     <div id="app" style="display:none">
+      
+      <!-- PANEL DE CANCIONES -->
+      <div class="panel">
+        <h3>🎵 Gestionar Canciones (Máx. 100)</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:10px">
+          Pega tu lista. Formato: <b>Título - Artista</b> (una por línea).
+        </p>
+        <textarea id="songsList" rows="10" placeholder="Canción 1 - Artista 1&#10;Canción 2 - Artista 2"></textarea>
+        <div class="row">
+          <button class="btn primary" id="saveSongsBtn">Guardar Canciones</button>
+        </div>
+        <p id="songCount" style="margin-top: 10px; font-size: 13px; color: var(--muted);"></p>
+      </div>
+
+      <!-- PANEL DE ENLACES -->
       <div class="panel">
         <h3>➕ Generar enlaces de votación</h3>
         <p style="color:var(--muted);font-size:13px;margin-bottom:10px">
-          Escribe un nombre por línea. Los enlaces se generarán aquí mismo y se copiarán a tu portapapeles.
+          Escribe un nombre por línea. Los enlaces se copiarán automáticamente.
         </p>
-        <textarea id="names" rows="6" placeholder="Ana García&#10;Carlos Pérez&#10;María López"></textarea>
+        <textarea id="names" rows="4" placeholder="Ana García&#10;Carlos Pérez"></textarea>
         <div class="row">
           <button class="btn primary" id="addBtn">Generar y copiar enlaces</button>
         </div>
       </div>
 
+      <!-- CONFIGURACIÓN -->
       <div class="panel">
         <h3>⏰ Configuración</h3>
         <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:6px">Fecha límite</label>
@@ -44,6 +60,7 @@
         </div>
       </div>
 
+      <!-- TABLA DE VOTOS -->
       <div class="panel">
         <h3>👥 Votos recibidos <span id="voterCount" style="color:var(--muted);font-weight:400;font-size:13px"></span></h3>
         <div style="overflow:auto">
@@ -69,27 +86,16 @@ async function login() {
   pass = $('#pass').value;
   try {
     const r = await api('GET', '/api/admin/voters');
-    if (!r || r.error) {
-      localStorage.removeItem('adminPass');
-      return alert('Contraseña incorrecta');
-    }
-    localStorage.setItem('adminPass', pass); // Guarda la clave
+    if (!r || r.error) return alert('Contraseña incorrecta');
+    localStorage.setItem('adminPass', pass);
     $('#loginPanel').style.display = 'none';
     $('#app').style.display = 'block';
     loadData(r);
+    loadSongs(); // Cargar canciones al entrar
   } catch (e) {
     alert('Contraseña incorrecta o error de red.');
   }
 }
-
-// Auto-login si ya se guardó la clave
-window.addEventListener('DOMContentLoaded', () => {
-  const savedPass = localStorage.getItem('adminPass');
-  if (savedPass) {
-    $('#pass').value = savedPass;
-    login();
-  }
-});
 
 async function api(method, url, body) {
   const r = await fetch(url, {
@@ -103,6 +109,41 @@ async function api(method, url, body) {
   return data;
 }
 
+// --- LÓGICA DE CANCIONES ---
+async function loadSongs() {
+  try {
+    const r = await api('GET', '/api/admin/songs');
+    if (r && r.songs) {
+      $('#songsList').value = r.songs.map(s => `${s.title} - ${s.artist}`).join('\n');
+      $('#songCount').textContent = `Total: ${r.songs.length} canciones actuales.`;
+    }
+  } catch (e) { console.error(e); }
+}
+
+$('#saveSongsBtn').onclick = async () => {
+  const text = $('#songsList').value;
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  
+  if (lines.length === 0) return alert('No hay canciones escritas.');
+  if (lines.length > 100) return alert('⚠️ El límite es de 100 canciones. Tienes ' + lines.length);
+
+  const songs = lines.map(line => {
+    const parts = line.split('-');
+    const title = parts[0].trim();
+    const artist = parts.slice(1).join('-').trim() || 'Desconocido';
+    return { title, artist };
+  });
+
+  try {
+    await api('POST', '/api/admin/songs', { songs });
+    alert('✅ Canciones guardadas con éxito.');
+    loadSongs();
+  } catch (e) {
+    alert('Error al guardar: ' + e.message);
+  }
+};
+
+// --- LÓGICA DE VOTANTES Y CONFIGURACIÓN ---
 function loadData({ deadline, voters }) {
   const safeVoters = voters || [];
   const dl = new Date(deadline || Date.now() + 7 * 24 * 3600 * 1000);
@@ -129,10 +170,8 @@ $('#addBtn').onclick = () => {
   const tableRows = [];
   
   names.forEach(name => {
-    // Generamos un código único localmente sin tocar la base de datos
     const token = Math.random().toString(36).substring(2, 12);
     const link = `${baseUrl}/v/${token}?name=${encodeURIComponent(name)}`;
-    
     links.push(link);
     tableRows.push(`
       <tr>
@@ -145,7 +184,7 @@ $('#addBtn').onclick = () => {
   
   $('#voterTable').innerHTML = tableRows.join('');
   navigator.clipboard.writeText(links.join('\n'));
-  alert('✅ Enlaces generados y copiados al portapapeles.\n\nPégalos en WhatsApp o correo para enviarlos.');
+  alert('✅ Enlaces generados y copiados al portapapeles.');
   $('#names').value = '';
 };
 
@@ -168,6 +207,14 @@ $('#resetVotes').onclick = async () => {
   loadData(await api('GET', '/api/admin/voters'));
   alert('✅ Votos borrados');
 };
+
+window.addEventListener('DOMContentLoaded', () => {
+  const savedPass = localStorage.getItem('adminPass');
+  if (savedPass) {
+    $('#pass').value = savedPass;
+    login();
+  }
+});
 </script>
 </body>
 </html>
