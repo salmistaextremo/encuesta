@@ -11,9 +11,9 @@ export default withErrorHandler(async (req, res) => {
     return send(res, 429, { error: 'Demasiadas solicitudes' });
   }
 
+  // Recibimos el token, las canciones y el nombre desde el navegador
   const { token, songIds, name } = parseBody(req);
-
-
+  
   if (!token || !Array.isArray(songIds)) {
     return send(res, 400, { error: 'Datos inválidos' });
   }
@@ -21,13 +21,11 @@ export default withErrorHandler(async (req, res) => {
     return send(res, 400, { error: 'Debes elegir exactamente 50 canciones' });
   }
 
-  const [voter, cfg, songs] = await Promise.all([
-    redis.hget(KEYS.voters, token),
+  const [cfg, songs] = await Promise.all([
     getConfig(),
     getSongs(),
   ]);
 
-  if (!voter) return send(res, 404, { error: 'Enlace inválido' });
   if (new Date() >= new Date(cfg.deadline)) {
     return send(res, 400, { error: 'La encuesta ha finalizado' });
   }
@@ -38,16 +36,18 @@ export default withErrorHandler(async (req, res) => {
     return send(res, 400, { error: 'Selección inválida' });
   }
 
+  // Guardamos el voto con el nombre que vino en el enlace
   const voteData = {
-  at: new Date().toISOString(),
-  songIds: [...songIds],
-  ip,
-  name: name || 'Votante'
-};
+    at: new Date().toISOString(),
+    songIds: [...songIds],
+    ip,
+    name: name || 'Votante'
+  };
 
-  // HSETNX atómico — 1 si se creó, 0 si ya existía
-  const created = await redis.hsetnx(KEYS.votes, token, voteData);
-  if (!created) return send(res, 409, { error: 'Ya has votado' });
+  // HSETNX es atómico: si ya votó, devuelve 0.
+  const created = await redis.hsetnx(KEYS.votes, token, JSON.stringify(voteData));
+  
+  if (!created) return send(res, 409, { error: 'Ya has votado con este enlace' });
 
   send(res, 200, { ok: true });
 });
