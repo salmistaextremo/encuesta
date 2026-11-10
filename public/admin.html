@@ -101,7 +101,8 @@ function loadData({ deadline, voters }) {
   const tz = new Date(dl.getTime() - dl.getTimezoneOffset() * 60000).toISOString().slice(0,16);
   $('#deadline').value = tz;
 
-  $('#voterCount').textContent = `(${voters.length} · ${voters.filter(v => v.voted).length} votaron)`;
+  const safeVoters = voters || [];
+$('#voterCount').textContent = `(${safeVoters.length} · ${safeVoters.filter(v => v.voted).length} votaron)`;
   allLinks = voters.map(v => `${location.origin}${v.link}`);
 
   $('#voterTable').innerHTML = voters.map(v => `
