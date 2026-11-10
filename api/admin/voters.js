@@ -17,8 +17,12 @@ export default withErrorHandler(async (req, res) => {
     const votes = votesObj || {};
 
     const list = Object.entries(voters).map(([token, v]) => {
-      // Fix para Vercel: convertir si viene como string
-      const voterData = typeof v === 'string' ? JSON.parse(v) : v;
+      // Vercel a veces devuelve los objetos como texto, así que los leemos con cuidado
+      let voterData = v;
+      if (typeof v === 'string') {
+        try { voterData = JSON.parse(v); } catch (e) {}
+      }
+      
       return {
         name: voterData.name || 'Sin nombre',
         token: token,
@@ -40,7 +44,10 @@ export default withErrorHandler(async (req, res) => {
     const existing = (await redis.hgetall(KEYS.voters)) || {};
     const existingNames = new Set(
       Object.values(existing).map(v => {
-        const data = typeof v === 'string' ? JSON.parse(v) : v;
+        let data = v;
+        if (typeof v === 'string') {
+          try { data = JSON.parse(v); } catch (e) {}
+        }
         return (data.name || '').toLowerCase();
       })
     );
@@ -52,9 +59,8 @@ export default withErrorHandler(async (req, res) => {
       
       const token = crypto.randomBytes(9).toString('base64url');
       
-      // Guardamos explícitamente como JSON
-      const voterData = JSON.stringify({ name, token });
-      await redis.hset(KEYS.voters, token, voterData);
+      // Guardamos como un objeto nativo de Redis para evitar errores de texto
+      await redis.hset(KEYS.voters, { [token]: { name, token } });
       
       existingNames.add(name.toLowerCase());
       created.push({ name, token, link: `/v/${token}` });
