@@ -118,7 +118,7 @@ function loadData({ deadline, voters }) {
     btn.onclick = async () => {
       if (!confirm('¿Eliminar este votante?')) return;
       try {
-        await api('DELETE', '/api/voter/voters/' + btn.dataset.token);
+        await api('DELETE', '/api/voter/voters?token=' + btn.dataset.token);
         loadData(await api('GET', '/api/admin/voters'));
       } catch (e) {
         alert('Error al eliminar: ' + e.message);
