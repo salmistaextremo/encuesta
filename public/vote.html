@@ -48,6 +48,8 @@
 
 <script>
 const token = location.pathname.split('/').filter(Boolean).pop();
+const urlParams = new URLSearchParams(window.location.search);
+const voterNameFromUrl = urlParams.get('name') || 'Votante';
 const $ = sel => document.querySelector(sel);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -139,7 +141,7 @@ async function submitVote() {
     const r = await fetch('/api/vote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, songIds: [...selected] })
+      body: JSON.stringify({ token, songIds: [...selected], name: voterNameFromUrl })
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Error');
