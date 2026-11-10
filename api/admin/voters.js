@@ -16,13 +16,17 @@ export default withErrorHandler(async (req, res) => {
     const voters = votersObj || {};
     const votes = votesObj || {};
 
-    const list = Object.entries(voters).map(([token, v]) => ({
-      name: v.name,
-      token,
-      voted: !!votes[token],
-      votedAt: votes[token]?.at || null,
-      link: `/v/${token}`,
-    }));
+    const list = Object.entries(voters).map(([token, v]) => {
+      // Fix para Vercel: convertir si viene como string
+      const voterData = typeof v === 'string' ? JSON.parse(v) : v;
+      return {
+        name: voterData.name || 'Sin nombre',
+        token: token,
+        voted: !!votes[token],
+        votedAt: votes[token]?.at || null,
+        link: `/v/${token}`,
+      };
+    });
 
     return send(res, 200, { deadline: cfg.deadline, voters: list });
   }
@@ -35,7 +39,10 @@ export default withErrorHandler(async (req, res) => {
 
     const existing = (await redis.hgetall(KEYS.voters)) || {};
     const existingNames = new Set(
-      Object.values(existing).map(v => v.name.toLowerCase())
+      Object.values(existing).map(v => {
+        const data = typeof v === 'string' ? JSON.parse(v) : v;
+        return (data.name || '').toLowerCase();
+      })
     );
 
     const created = [];
@@ -43,10 +50,12 @@ export default withErrorHandler(async (req, res) => {
       const name = String(raw).trim();
       if (!name || existingNames.has(name.toLowerCase())) continue;
       
-      // Genera un código único, ej: "aB3xY9z"
       const token = crypto.randomBytes(9).toString('base64url');
       
-      await redis.hset(KEYS.voters, token, { name, token });
+      // Guardamos explícitamente como JSON
+      const voterData = JSON.stringify({ name, token });
+      await redis.hset(KEYS.voters, token, voterData);
+      
       existingNames.add(name.toLowerCase());
       created.push({ name, token, link: `/v/${token}` });
     }
