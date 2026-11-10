@@ -37,13 +37,14 @@ export async function getSongs() {
     try { songs = JSON.parse(songs); } catch (e) {}
   }
   if (!songs) {
-    const adj = ['Eterno','Perdido','Salvaje','Azul','Dorado','Silencioso','Roto','Libre','Invisible','Lejano'];
-    const sus = ['Corazón','Fuego','Mar','Cielo','Camino','Sueño','Viento','Noche','Luz','Sombras'];
-    const arts = ['Los Fantasmas','Marina Sol','El Ruido','Cielo Abierto','Vértigo','La Luna'];
-    songs = [];
-    for (let i = 0; i < 100; i++) {
-      songs.push({ id: i + 1, title: `${adj[i % adj.length]} ${sus[(i * 7 + 3) % sus.length]}`, artist: arts[(i * 3) % arts.length] });
-    }
+    // 👇 AQUÍ VAN TUS 100 CANCIONES 👇
+    songs = [
+      { id: 1, title: "Nombre de la canción 1", artist: "Artista 1" },
+      { id: 2, title: "Nombre de la canción 2", artist: "Artista 2" },
+      { id: 3, title: "Nombre de la canción 3", artist: "Artista 3" },
+      // ... (continúa hasta la canción 100)
+      { id: 100, title: "Nombre de la canción 100", artist: "Artista 100" }
+    ];
     await redis.set(KEYS.songs, songs);
   }
   return songs;
