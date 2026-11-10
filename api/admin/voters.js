@@ -17,14 +17,12 @@ export default withErrorHandler(async (req, res) => {
     const votes = votesObj || {};
 
     const list = Object.entries(voters).map(([token, v]) => {
-      // Vercel a veces devuelve los objetos como texto, así que los leemos con cuidado
       let voterData = v;
       if (typeof v === 'string') {
         try { voterData = JSON.parse(v); } catch (e) {}
       }
-      
       return {
-        name: voterData.name || 'Sin nombre',
+        name: voterData?.name || 'Sin nombre',
         token: token,
         voted: !!votes[token],
         votedAt: votes[token]?.at || null,
@@ -36,7 +34,9 @@ export default withErrorHandler(async (req, res) => {
   }
 
   if (req.method === 'POST') {
-    const { names } = parseBody(req);
+    const body = parseBody(req);
+    const names = body.names;
+
     if (!Array.isArray(names) || !names.length) {
       return send(res, 400, { error: 'Sin nombres' });
     }
@@ -48,7 +48,7 @@ export default withErrorHandler(async (req, res) => {
         if (typeof v === 'string') {
           try { data = JSON.parse(v); } catch (e) {}
         }
-        return (data.name || '').toLowerCase();
+        return (data?.name || '').toLowerCase();
       })
     );
 
@@ -57,10 +57,11 @@ export default withErrorHandler(async (req, res) => {
       const name = String(raw).trim();
       if (!name || existingNames.has(name.toLowerCase())) continue;
       
+      // Genera un token único
       const token = crypto.randomBytes(9).toString('base64url');
       
-      // Guardamos como un objeto nativo de Redis para evitar errores de texto
-      await redis.hset(KEYS.voters, { [token]: { name, token } });
+      // Guardamos como JSON estricto para evitar que Redis lo separe por letras
+      await redis.hset(KEYS.voters, { [token]: JSON.stringify({ name, token }) });
       
       existingNames.add(name.toLowerCase());
       created.push({ name, token, link: `/v/${token}` });
