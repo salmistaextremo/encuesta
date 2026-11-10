@@ -69,7 +69,11 @@ async function login() {
   pass = $('#pass').value;
   try {
     const r = await api('GET', '/api/admin/voters');
-    if (!r || r.error) return alert('Contraseña incorrecta');
+    if (!r || r.error) {
+      localStorage.removeItem('adminPass');
+      return alert('Contraseña incorrecta');
+    }
+    localStorage.setItem('adminPass', pass); // Guarda la clave
     $('#loginPanel').style.display = 'none';
     $('#app').style.display = 'block';
     loadData(r);
@@ -77,6 +81,15 @@ async function login() {
     alert('Contraseña incorrecta o error de red.');
   }
 }
+
+// Auto-login si ya se guardó la clave
+window.addEventListener('DOMContentLoaded', () => {
+  const savedPass = localStorage.getItem('adminPass');
+  if (savedPass) {
+    $('#pass').value = savedPass;
+    login();
+  }
+});
 
 async function api(method, url, body) {
   const r = await fetch(url, {
