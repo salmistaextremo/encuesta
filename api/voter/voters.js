@@ -26,13 +26,13 @@ export default withErrorHandler(async (req, res) => {
     try { voter = JSON.parse(voterRaw); } catch (e) {}
   }
 
-  const ended = new Date() >= new Date(cfg.deadline);
+  const ended = new Date() >= new Date(cfg?.deadline || Date.now());
 
   send(res, 200, {
-    name: voter?.name || 'Votante',
+    name: (voter && voter.name) ? voter.name : 'Votante',
     voted: !!hasVoted,
     ended,
-    deadline: cfg.deadline,
+    deadline: cfg?.deadline || new Date().toISOString(),
     songs,
   });
 });
