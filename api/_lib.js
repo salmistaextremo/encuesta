@@ -34,17 +34,16 @@ export async function getConfig() {
 export async function getSongs() {
   let songs = await redis.get(KEYS.songs);
   if (typeof songs === 'string') {
-    try { songs = JSON.parse(songs); } catch (e) {}
+    try { songs = JSON.parse(songs); } catch (e) { songs = null; }
   }
-  if (!songs) {
-    // 👇 AQUÍ VAN TUS 100 CANCIONES 👇
-    songs = [
-      { id: 1, title: "Nombre de la canción 1", artist: "Artista 1" },
-      { id: 2, title: "Nombre de la canción 2", artist: "Artista 2" },
-      { id: 3, title: "Nombre de la canción 3", artist: "Artista 3" },
-      // ... (continúa hasta la canción 100)
-      { id: 100, title: "Nombre de la canción 100", artist: "Artista 100" }
-    ];
+  
+  // Si no hay canciones, ponemos 5 de prueba para que no falle
+  if (!songs || !songs.length) {
+    songs = Array.from({length: 5}, (_, i) => ({
+      id: i + 1,
+      title: `Canción de prueba ${i + 1}`,
+      artist: `Artista de prueba`
+    }));
     await redis.set(KEYS.songs, songs);
   }
   return songs;
