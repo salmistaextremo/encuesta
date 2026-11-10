@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Resultados · Top 50 Canciones</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🎵 Top 50 Canciones</div>
+    <a href="/admin" style="color:var(--muted);text-decoration:none;font-size:13px">Admin</a>
+  </header>
+
+  <main>
+    <div class="hero">
+      <h1>Resultados oficiales</h1>
+      <p>Las 50 canciones más votadas por los participantes</p>
+    </div>
+    <div id="content" style="background:var(--card);border:1px solid var(--border);border-radius:22px;overflow:hidden"></div>
+  </main>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+(async function () {
+  const r = await fetch('/api/results');
+  const data = await r.json();
+  if (r.status === 403) return renderCountdown(new Date(data.deadline));
+  if (!r.ok) return $('#content').innerHTML = `<div class="countdown"><p>❌ ${esc(data.error)}</p></div>`;
+  render(data);
+})();
+
+function renderCountdown(dl) {
+  const render = () => {
+    const ms = dl - Date.now();
+    if (ms <= 0) return location.reload();
+    const s = Math.floor(ms / 1000);
+    const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600),
+          m = Math.floor(s % 3600 / 60), sec = s % 60;
+    $('#content').innerHTML = `
+      <div class="countdown">
+        <h3>🔒 Resultados bloqueados</h3>
+        <p>Se revelarán el <strong>${new Date(dl).toLocaleString('es-ES',{dateStyle:'long',timeStyle:'short'})}</strong></p>
+        <div class="clock">
+          <div><strong>${d}</strong><span>días</span></div>
+          <div><strong>${String(h).padStart(2,'0')}</strong><span>hrs</span></div>
+          <div><strong>${String(m).padStart(2,'0')}</strong><span>min</span></div>
+          <div><strong>${String(sec).padStart(2,'0')}</strong><span>seg</span></div>
+        </div>
+      </div>`;
+  };
+  render(); setInterval(render, 1000);
+}
+
+function render({ results, totalVoters, totalVotes }) {
+  const max = results[0]?.votes || 1;
+  $('#content').innerHTML = `
+    <div class="results-header">
+      <h2>🏆 Top 50 Canciones</h2>
+      <div class="stats">
+        <span>👥 <b>${totalVoters}</b> participantes</span>
+        <span>🗳️ <b>${totalVotes}</b> votos emitidos</span>
+      </div>
+    </div>
+    <div class="results-list" style="max-height:none">
+      ${results.map((r, i) => {
+        const rc = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+        return `<div class="result-row" style="animation-delay:${Math.min(i*25,900)}ms">
+          <div class="rank ${rc}">${i+1}</div>
+          <div class="result-main">
+            <div class="result-title">${esc(r.title)}</div>
+            <div class="result-artist">${esc(r.artist)}</div>
+            <div class="bar-wrap"><div class="bar" data-pct="${(r.votes/max)*100}"></div></div>
+          </div>
+          <div class="result-votes"><span class="cv" data-to="${r.votes}">0</span><small>votos</small></div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.bar').forEach(b => b.style.width = b.dataset.pct + '%');
+    document.querySelectorAll('.cv').forEach(el => {
+      const to = +el.dataset.to, start = performance.now(), dur = 1200;
+      const step = now => {
+        const t = Math.min(1, (now - start) / dur);
+        el.textContent = Math.round(to * (1 - Math.pow(1 - t, 3)));
+        if (t < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  });
+}
+</script>
+</body>
+</html>

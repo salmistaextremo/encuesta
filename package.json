@@ -1,0 +1,12 @@
+{
+  "name": "encuesta-canciones",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.34.3"
+  }
+}

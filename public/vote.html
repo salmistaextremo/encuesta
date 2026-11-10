@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Encuesta · Top 50 Canciones</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🎵 Top 50 Canciones</div>
+    <div class="voter">Hola, <strong id="voterName">…</strong></div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <h1>Elige tus 50 canciones favoritas</h1>
+      <p>Selecciona exactamente 50 de las 100 opciones. Solo puedes votar una vez.</p>
+    </section>
+
+    <div class="toolbar">
+      <input id="search" placeholder="🔍 Buscar canción o artista…" />
+      <select id="sort">
+        <option value="id">Orden original</option>
+        <option value="title">Título A–Z</option>
+        <option value="artist">Artista A–Z</option>
+      </select>
+      <button id="clear" class="btn ghost">Limpiar</button>
+    </div>
+
+    <div id="songsGrid" class="grid"></div>
+  </main>
+
+  <footer class="sticky" id="footer" style="display:none">
+    <div class="counter">Seleccionadas: <strong><span id="count">0</span> / 50</strong></div>
+    <div class="actions">
+      <button id="resultsBtn" class="btn secondary">Ver resultados</button>
+      <button id="submitBtn" class="btn primary" disabled>Enviar voto</button>
+    </div>
+  </footer>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <button class="modal-close" id="modalClose">×</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+<script>
+const token = location.pathname.split('/').filter(Boolean).pop();
+const $ = sel => document.querySelector(sel);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let allSongs = [], selected = new Set(), deadline = null;
+
+(async function boot() {
+  try {
+    const r = await fetch('/api/voter/' + encodeURIComponent(token));
+    if (!r.ok) return showError('Enlace inválido o expirado');
+    const data = await r.json();
+    allSongs = data.songs;
+    deadline = new Date(data.deadline);
+    $('#voterName').textContent = data.name;
+
+    if (data.voted) return showThankYou(data.name);
+    if (data.ended) return showEnded();
+
+    render();
+    $('#footer').style.display = 'flex';
+    wireControls();
+  } catch (e) {
+    showError('Error de conexión');
+  }
+})();
+
+function render() {
+  const q = ($('#search').value || '').toLowerCase().trim();
+  const sort = $('#sort').value;
+  let list = allSongs.filter(s =>
+    !q || s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q)
+  );
+  if (sort === 'title') list.sort((a,b) => a.title.localeCompare(b.title));
+  if (sort === 'artist') list.sort((a,b) => a.artist.localeCompare(b.artist) || a.title.localeCompare(b.title));
+
+  $('#songsGrid').innerHTML = list.map(s => `
+    <div class="song-card ${selected.has(s.id) ? 'selected' : ''}" data-id="${s.id}">
+      <div class="check">${selected.has(s.id) ? '✓' : ''}</div>
+      <div class="song-info">
+        <div class="song-title">${esc(s.title)}</div>
+        <div class="song-artist">${esc(s.artist)}</div>
+      </div>
+    </div>
+  `).join('');
+
+  document.querySelectorAll('.song-card').forEach(card => {
+    card.addEventListener('click', () => toggle(+card.dataset.id));
+  });
+}
+
+function toggle(id) {
+  if (selected.has(id)) selected.delete(id);
+  else {
+    if (selected.size >= 50) return flashCounter();
+    selected.add(id);
+  }
+  render();
+  updateCounter();
+}
+
+function flashCounter() {
+  $('#count').parentElement.animate(
+    [{ color: '#ff5b7a' }, { color: '' }],
+    { duration: 500, easing: 'ease' }
+  );
+}
+
+function updateCounter() {
+  $('#count').textContent = selected.size;
+  $('#count').parentElement.classList.toggle('full', selected.size === 50);
+  $('#submitBtn').disabled = selected.size !== 50;
+}
+
+function wireControls() {
+  $('#search').addEventListener('input', render);
+  $('#sort').addEventListener('change', render);
+  $('#clear').addEventListener('click', () => { selected.clear(); render(); updateCounter(); });
+  $('#submitBtn').addEventListener('click', submitVote);
+  $('#resultsBtn').addEventListener('click', openResults);
+  $('#modalClose').addEventListener('click', closeModal);
+  $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+}
+
+async function submitVote() {
+  if (selected.size !== 50) return;
+  const btn = $('#submitBtn');
+  btn.disabled = true; btn.textContent = 'Enviando…';
+  try {
+    const r = await fetch('/api/vote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, songIds: [...selected] })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Error');
+    showThankYou($('#voterName').textContent);
+  } catch (e) {
+    alert('❌ ' + e.message);
+    btn.disabled = false; btn.textContent = 'Enviar voto';
+  }
+}
+
+function showThankYou(name) {
+  $('#footer').style.display = 'none';
+  $('#main').innerHTML = `
+    <div class="thankyou">
+      <div class="big-check">✓</div>
+      <h1>¡Gracias, ${esc(name)}!</h1>
+      <p>Tu voto fue registrado correctamente.</p>
+      <p>Los resultados se revelarán el <strong>${fmt(deadline)}</strong></p>
+      <button id="resultsBtn" class="btn primary">Ver resultados</button>
+    </div>`;
+  $('#resultsBtn').addEventListener('click', openResults);
+}
+
+function showEnded() {
+  $('#footer').style.display = 'none';
+  $('#main').innerHTML = `
+    <div class="thankyou">
+      <div class="big-check" style="background:linear-gradient(135deg,#7c5cff,#00d4ff);color:#fff">⏱</div>
+      <h1>La encuesta ha finalizado</h1>
+      <p>Ya puedes consultar los resultados.</p>
+      <button id="resultsBtn" class="btn primary">Ver resultados</button>
+    </div>`;
+  $('#resultsBtn').addEventListener('click', openResults);
+}
+
+function showError(msg) {
+  $('#main').innerHTML = `<div class="error-screen"><h1>🚫</h1><p>${esc(msg)}</p></div>`;
+  $('#footer').style.display = 'none';
+}
+
+async function openResults() {
+  $('#modal').classList.remove('hidden');
+  $('#modalContent').innerHTML = `<div class="countdown"><p>Cargando…</p></div>`;
+  try {
+    const r = await fetch('/api/results');
+    const data = await r.json();
+    if (r.status === 403) return renderCountdown(new Date(data.deadline));
+    if (!r.ok) throw new Error(data.error || 'Error');
+    renderResults(data);
+  } catch (e) {
+    $('#modalContent').innerHTML = `<div class="countdown"><p>❌ ${esc(e.message)}</p></div>`;
+  }
+}
+
+function closeModal() { $('#modal').classList.add('hidden'); }
+
+function renderCountdown(dl) {
+  const render = () => {
+    const ms = dl - Date.now();
+    if (ms <= 0) { openResults(); return; }
+    const s = Math.floor(ms / 1000);
+    const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600),
+          m = Math.floor(s % 3600 / 60), sec = s % 60;
+    $('#modalContent').innerHTML = `
+      <div class="countdown">
+        <h3>🔒 Resultados bloqueados</h3>
+        <p>Se revelarán el <strong>${fmt(dl)}</strong></p>
+        <div class="clock">
+          <div><strong>${d}</strong><span>días</span></div>
+          <div><strong>${String(h).padStart(2,'0')}</strong><span>hrs</span></div>
+          <div><strong>${String(m).padStart(2,'0')}</strong><span>min</span></div>
+          <div><strong>${String(sec).padStart(2,'0')}</strong><span>seg</span></div>
+        </div>
+      </div>`;
+  };
+  render();
+  const iv = setInterval(render, 1000);
+  const stop = () => clearInterval(iv);
+  $('#modalClose').addEventListener('click', stop, { once: true });
+  $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') stop(); }, { once: true });
+}
+
+function renderResults(data) {
+  const { results, totalVoters, totalVotes } = data;
+  const max = results[0]?.votes || 1;
+  $('#modalContent').innerHTML = `
+    <div class="results-header">
+      <h2>🏆 Top 50 Canciones</h2>
+      <div class="stats">
+        <span>👥 <b>${totalVoters}</b> participantes</span>
+        <span>🗳️ <b>${totalVotes}</b> votos emitidos</span>
+      </div>
+    </div>
+    <div class="results-list" id="resultsList">
+      ${results.map((r, i) => {
+        const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+        return `
+          <div class="result-row" style="animation-delay:${Math.min(i * 25, 900)}ms">
+            <div class="rank ${rankClass}">${i + 1}</div>
+            <div class="result-main">
+              <div class="result-title">${esc(r.title)}</div>
+              <div class="result-artist">${esc(r.artist)}</div>
+              <div class="bar-wrap"><div class="bar" data-pct="${(r.votes / max) * 100}"></div></div>
+            </div>
+            <div class="result-votes"><span class="cv" data-to="${r.votes}">0</span><small>votos</small></div>
+          </div>`;
+      }).join('')}
+    </div>`;
+  requestAnimationFrame(() => {
+    document.querySelectorAll('#resultsList .bar').forEach(b => b.style.width = b.dataset.pct + '%');
+    document.querySelectorAll('#resultsList .cv').forEach(el => animateCount(el, +el.dataset.to));
+  });
+}
+
+function animateCount(el, to, dur = 1200) {
+  const start = performance.now();
+  const step = now => {
+    const t = Math.min(1, (now - start) / dur);
+    el.textContent = Math.round(to * (1 - Math.pow(1 - t, 3)));
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function fmt(d) {
+  return new Date(d).toLocaleString('es-ES', { dateStyle: 'long', timeStyle: 'short' });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin · Encuesta</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">⚙️ Panel Admin</div>
+    <a href="/results" style="color:var(--muted);text-decoration:none;font-size:13px">Ver resultados</a>
+  </header>
+
+  <div class="admin-wrap">
+    <div id="loginPanel" class="panel">
+      <h3>🔐 Ingreso</h3>
+      <input id="pass" type="password" placeholder="Contraseña de administrador" />
+      <div class="row"><button class="btn primary" id="loginBtn">Entrar</button></div>
+      <p style="color:var(--muted);font-size:12px;margin-top:10px">
+        Contraseña inicial definida en la env var <code>ADMIN_PASSWORD</code>.
+      </p>
+    </div>
+
+    <div id="app" style="display:none">
+      <div class="panel">
+        <h3>➕ Agregar votantes</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:10px">
+          Un nombre por línea. Se generará un enlace único para cada uno.
+        </p>
+        <textarea id="names" rows="6" placeholder="Ana García&#10;Carlos Pérez&#10;María López"></textarea>
+        <div class="row">
+          <button class="btn primary" id="addBtn">Generar enlaces</button>
+          <button class="btn ghost" id="copyAllBtn">Copiar todos los enlaces</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>⏰ Configuración</h3>
+        <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:6px">Fecha límite</label>
+        <input id="deadline" type="datetime-local" />
+        <label style="display:block;font-size:13px;color:var(--muted);margin:14px 0 6px">Nueva contraseña (dejar vacío para no cambiar)</label>
+        <input id="newPass" type="text" placeholder="••••••••" />
+        <div class="row">
+          <button class="btn primary" id="saveCfg">Guardar configuración</button>
+          <button class="btn ghost" id="previewBtn">👁 Previsualizar resultados</button>
+          <button class="btn danger" id="resetVotes">Borrar todos los votos</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>👥 Votantes <span id="voterCount" style="color:var(--muted);font-weight:400;font-size:13px"></span></h3>
+        <div style="overflow:auto">
+          <table class="voter-table">
+            <thead><tr><th>Nombre</th><th>Enlace</th><th>Estado</th><th></th></tr></thead>
+            <tbody id="voterTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let pass = '';
+let allLinks = [];
+
+$('#loginBtn').onclick = login;
+$('#pass').onkeydown = e => { if (e.key === 'Enter') login(); };
+
+async function login() {
+  pass = $('#pass').value;
+  try {
+    const r = await api('GET', '/api/admin/voters');
+    if (!r) return alert('Contraseña incorrecta');
+    $('#loginPanel').style.display = 'none';
+    $('#app').style.display = 'block';
+    loadData(r);
+  } catch { alert('Contraseña incorrecta'); }
+}
+
+async function api(method, url, body) {
+  const r = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'x-admin-pass': pass },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (r.status === 401) throw new Error('auth');
+  return r.json();
+}
+
+function loadData({ deadline, voters }) {
+  const dl = new Date(deadline);
+  const tz = new Date(dl.getTime() - dl.getTimezoneOffset() * 60000).toISOString().slice(0,16);
+  $('#deadline').value = tz;
+
+  $('#voterCount').textContent = `(${voters.length} · ${voters.filter(v => v.voted).length} votaron)`;
+  allLinks = voters.map(v => `${location.origin}${v.link}`);
+
+  $('#voterTable').innerHTML = voters.map(v => `
+    <tr>
+      <td>${esc(v.name)}</td>
+      <td><a href="${v.link}" target="_blank" style="color:var(--accent-2);font-size:12px">${location.origin}${v.link}</a></td>
+      <td><span class="pill ${v.voted ? 'yes' : 'no'}">${v.voted ? '✓ Votó' : 'Pendiente'}</span></td>
+      <td><button class="link-btn" data-token="${v.token}">Eliminar</button></td>
+    </tr>
+  `).join('');
+
+  $('#voterTable').querySelectorAll('[data-token]').forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm('¿Eliminar este votante?')) return;
+      await api('DELETE', '/api/admin/voters/' + btn.dataset.token);
+      loadData(await api('GET', '/api/admin/voters'));
+    };
+  });
+}
+
+$('#addBtn').onclick = async () => {
+  const names = $('#names').value.split(/\n|,/).map(s => s.trim()).filter(Boolean);
+  if (!names.length) return alert('Escribe al menos un nombre');
+  await api('POST', '/api/admin/voters', { names });
+  $('#names').value = '';
+  loadData(await api('GET', '/api/admin/voters'));
+};
+
+$('#copyAllBtn').onclick = () => {
+  if (!allLinks.length) return alert('No hay enlaces aún');
+  navigator.clipboard.writeText(allLinks.join('\n'));
+  alert('✅ Enlaces copiados al portapapeles');
+};
+
+$('#saveCfg').onclick = async () => {
+  const deadline = new Date($('#deadline').value).toISOString();
+  const adminPassword = $('#newPass').value.trim() || undefined;
+  await api('POST', '/api/admin/config', { deadline, adminPassword });
+  if (adminPassword) pass = adminPassword;
+  $('#newPass').value = '';
+  alert('✅ Configuración guardada');
+};
+
+$('#previewBtn').onclick = () => {
+  window.open('/api/results?force=1&pass=' + encodeURIComponent(pass), '_blank');
+};
+
+$('#resetVotes').onclick = async () => {
+  if (!confirm('⚠️ Se borrarán TODOS los votos. ¿Continuar?')) return;
+  await api('POST', '/api/admin/reset-votes');
+  loadData(await api('GET', '/api/admin/voters'));
+};
+</script>
+</body>
+</html>

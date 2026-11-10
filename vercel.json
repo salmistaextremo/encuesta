@@ -1,0 +1,9 @@
+{
+  "cleanUrls": true,
+  "redirects": [
+    { "source": "/", "destination": "/results", "permanent": false }
+  ],
+  "rewrites": [
+    { "source": "/v/:token", "destination": "/vote.html" }
+  ]
+}
