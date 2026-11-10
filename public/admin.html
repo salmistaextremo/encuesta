@@ -21,14 +21,13 @@
 
     <div id="app" style="display:none">
       <div class="panel">
-        <h3>➕ Agregar votantes</h3>
+        <h3>➕ Generar enlaces de votación</h3>
         <p style="color:var(--muted);font-size:13px;margin-bottom:10px">
-          Un nombre por línea. Se generará un enlace único para cada uno.
+          Escribe un nombre por línea. Los enlaces se generarán aquí mismo y se copiarán a tu portapapeles.
         </p>
         <textarea id="names" rows="6" placeholder="Ana García&#10;Carlos Pérez&#10;María López"></textarea>
         <div class="row">
-          <button class="btn primary" id="addBtn">Generar enlaces</button>
-          <button class="btn ghost" id="copyAllBtn">Copiar todos los enlaces</button>
+          <button class="btn primary" id="addBtn">Generar y copiar enlaces</button>
         </div>
       </div>
 
@@ -46,10 +45,10 @@
       </div>
 
       <div class="panel">
-        <h3>👥 Votantes <span id="voterCount" style="color:var(--muted);font-weight:400;font-size:13px"></span></h3>
+        <h3>👥 Votos recibidos <span id="voterCount" style="color:var(--muted);font-weight:400;font-size:13px"></span></h3>
         <div style="overflow:auto">
           <table class="voter-table">
-            <thead><tr><th>Nombre</th><th>Enlace</th><th>Estado</th><th></th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Fecha de voto</th><th>Estado</th></tr></thead>
             <tbody id="voterTable"></tbody>
           </table>
         </div>
@@ -62,7 +61,6 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let pass = '';
-let allLinks = [];
 
 $('#loginBtn').onclick = login;
 $('#pass').onkeydown = e => { if (e.key === 'Enter') login(); };
@@ -71,9 +69,7 @@ async function login() {
   pass = $('#pass').value;
   try {
     const r = await api('GET', '/api/admin/voters');
-    if (!r || r.error) {
-      return alert('Contraseña incorrecta');
-    }
+    if (!r || r.error) return alert('Contraseña incorrecta');
     $('#loginPanel').style.display = 'none';
     $('#app').style.display = 'block';
     loadData(r);
@@ -96,66 +92,57 @@ async function api(method, url, body) {
 
 function loadData({ deadline, voters }) {
   const safeVoters = voters || [];
-  
-  // Arreglo de fecha para que no rompa el panel si viene vacía
   const dl = new Date(deadline || Date.now() + 7 * 24 * 3600 * 1000);
   const tz = new Date(dl.getTime() - dl.getTimezoneOffset() * 60000).toISOString().slice(0,16);
   $('#deadline').value = tz;
 
-  $('#voterCount').textContent = `(${safeVoters.length} · ${safeVoters.filter(v => v.voted).length} votaron)`;
-  allLinks = safeVoters.map(v => `${location.origin}${v.link}`);
-
+  $('#voterCount').textContent = `(${safeVoters.length} votaron)`;
+  
   $('#voterTable').innerHTML = safeVoters.map(v => `
     <tr>
       <td>${esc(v.name)}</td>
-      <td><a href="${v.link}" target="_blank" style="color:var(--accent-2);font-size:12px">${location.origin}${v.link}</a></td>
-      <td><span class="pill ${v.voted ? 'yes' : 'no'}">${v.voted ? '✓ Votó' : 'Pendiente'}</span></td>
-      <td><button class="link-btn" data-token="${v.token}">Eliminar</button></td>
+      <td>${v.votedAt ? new Date(v.votedAt).toLocaleString() : '---'}</td>
+      <td><span class="pill yes">✓ Votó</span></td>
     </tr>
   `).join('');
-
-  $('#voterTable').querySelectorAll('[data-token]').forEach(btn => {
-    btn.onclick = async () => {
-      if (!confirm('¿Eliminar este votante?')) return;
-      try {
-        await api('DELETE', '/api/voter/voters?token=' + btn.dataset.token);
-        loadData(await api('GET', '/api/admin/voters'));
-      } catch (e) {
-        alert('Error al eliminar: ' + e.message);
-      }
-    };
-  });
 }
 
-$('#addBtn').onclick = async () => {
+$('#addBtn').onclick = () => {
   const names = $('#names').value.split(/\n|,/).map(s => s.trim()).filter(Boolean);
   if (!names.length) return alert('Escribe al menos un nombre');
-  try {
-    await api('POST', '/api/admin/voters', { names });
-    $('#names').value = '';
-    loadData(await api('GET', '/api/admin/voters'));
-  } catch (e) {
-    alert('Error al generar enlaces: ' + e.message);
-  }
-};
-
-$('#copyAllBtn').onclick = () => {
-  if (!allLinks.length) return alert('No hay enlaces aún');
-  navigator.clipboard.writeText(allLinks.join('\n'));
-  alert('✅ Enlaces copiados al portapapeles');
+  
+  const baseUrl = window.location.origin;
+  const links = [];
+  const tableRows = [];
+  
+  names.forEach(name => {
+    // Generamos un código único localmente sin tocar la base de datos
+    const token = Math.random().toString(36).substring(2, 12);
+    const link = `${baseUrl}/v/${token}?name=${encodeURIComponent(name)}`;
+    
+    links.push(link);
+    tableRows.push(`
+      <tr>
+        <td>${esc(name)}</td>
+        <td><a href="${link}" target="_blank" style="color:var(--accent-2);font-size:12px">${link}</a></td>
+        <td><span class="pill no">Pendiente</span></td>
+      </tr>
+    `);
+  });
+  
+  $('#voterTable').innerHTML = tableRows.join('');
+  navigator.clipboard.writeText(links.join('\n'));
+  alert('✅ Enlaces generados y copiados al portapapeles.\n\nPégalos en WhatsApp o correo para enviarlos.');
+  $('#names').value = '';
 };
 
 $('#saveCfg').onclick = async () => {
   const deadline = new Date($('#deadline').value).toISOString();
   const adminPassword = $('#newPass').value.trim() || undefined;
-  try {
-    await api('POST', '/api/admin/config', { deadline, adminPassword });
-    if (adminPassword) pass = adminPassword;
-    $('#newPass').value = '';
-    alert('✅ Configuración guardada');
-  } catch (e) {
-    alert('Error al guardar: ' + e.message);
-  }
+  await api('POST', '/api/admin/config', { deadline, adminPassword });
+  if (adminPassword) pass = adminPassword;
+  $('#newPass').value = '';
+  alert('✅ Configuración guardada');
 };
 
 $('#previewBtn').onclick = () => {
@@ -164,13 +151,9 @@ $('#previewBtn').onclick = () => {
 
 $('#resetVotes').onclick = async () => {
   if (!confirm('⚠️ Se borrarán TODOS los votos. ¿Continuar?')) return;
-  try {
-    await api('POST', '/api/admin/reset-votes');
-    loadData(await api('GET', '/api/admin/voters'));
-    alert('✅ Votos borrados');
-  } catch (e) {
-    alert('Error al borrar: ' + e.message);
-  }
+  await api('POST', '/api/admin/reset-votes');
+  loadData(await api('GET', '/api/admin/voters'));
+  alert('✅ Votos borrados');
 };
 </script>
 </body>
