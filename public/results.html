@@ -26,11 +26,33 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 (async function () {
-  const r = await fetch('/api/results');
-  const data = await r.json();
-  if (r.status === 403) return renderCountdown(new Date(data.deadline));
-  if (!r.ok) return $('#content').innerHTML = `<div class="countdown"><p>❌ ${esc(data.error)}</p></div>`;
-  render(data);
+  // Revisamos si venimos de una previsualización del admin
+  const urlParams = new URLSearchParams(window.location.search);
+  const isPreview = urlParams.get('preview') === '1';
+  const pass = urlParams.get('pass');
+
+  let apiUrl = '/api/results';
+  if (isPreview && pass) {
+    apiUrl += `?force=1&pass=${encodeURIComponent(pass)}`;
+  }
+
+  try {
+    const r = await fetch(apiUrl);
+    const data = await r.json();
+    
+    if (r.status === 403) {
+      // Si no ha terminado la fecha, mostramos el reloj
+      return renderCountdown(new Date(data.deadline));
+    }
+    if (!r.ok) {
+      return $('#content').innerHTML = `<div class="countdown"><p>❌ ${esc(data.error || 'Error')}</p></div>`;
+    }
+    
+    // Si hay resultados (o es preview), los mostramos
+    render(data);
+  } catch (err) {
+    $('#content').innerHTML = `<div class="countdown"><p>❌ Error de conexión</p></div>`;
+  }
 })();
 
 function renderCountdown(dl) {
