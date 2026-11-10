@@ -116,7 +116,7 @@ function loadData({ deadline, voters }) {
   $('#voterTable').querySelectorAll('[data-token]').forEach(btn => {
     btn.onclick = async () => {
       if (!confirm('¿Eliminar este votante?')) return;
-      await api('DELETE', '/api/admin/voters/' + btn.dataset.token);
+      await api('DELETE', '/api/voter/voters/' + btn.dataset.token);
       loadData(await api('GET', '/api/admin/voters'));
     };
   });
