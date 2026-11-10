@@ -1,24 +1,25 @@
-import { redis, KEYS, getConfig, send, checkAuth, withErrorHandler } from '../_lib.js';
+import { redis, KEYS, getConfig, getSongs, send, withErrorHandler } from '../../_lib.js';
 
 export default withErrorHandler(async (req, res) => {
-  if (!(await checkAuth(req, res))) return;
   if (req.method !== 'GET') return send(res, 405, { error: 'Method not allowed' });
+  
+  const { token, name } = req.query;
+  if (!token) return send(res, 400, { error: 'Token requerido' });
 
-  const cfg = await getConfig();
-  const votesObj = (await redis.hgetall(KEYS.votes)) || {};
+  const [hasVoted, cfg, songs] = await Promise.all([
+    redis.hexists(KEYS.votes, token),
+    getConfig(),
+    getSongs(),
+  ]);
 
-  const list = Object.entries(votesObj).map(([token, v]) => {
-    let data = v;
-    if (typeof v === 'string') {
-      try { data = JSON.parse(v); } catch (e) {}
-    }
-    return {
-      name: data?.name || 'Desconocido',
-      token: token,
-      voted: true,
-      votedAt: data?.at || null,
-    };
+  const ended = new Date() >= new Date(cfg.deadline);
+  const voterName = name || 'Votante';
+
+  send(res, 200, {
+    name: voterName,
+    voted: !!hasVoted,
+    ended,
+    deadline: cfg.deadline,
+    songs,
   });
-
-  return send(res, 200, { deadline: cfg.deadline, voters: list });
 });
