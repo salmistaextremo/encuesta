@@ -97,7 +97,7 @@ async function api(method, url, body) {
 }
 
 function loadData({ deadline, voters }) {
-  const dl = new Date(deadline);
+  const dl = new Date(deadline || Date.now() + 7 * 24 * 3600 * 1000);
   const tz = new Date(dl.getTime() - dl.getTimezoneOffset() * 60000).toISOString().slice(0,16);
   $('#deadline').value = tz;
 
