@@ -74,11 +74,16 @@ async function login() {
   pass = $('#pass').value;
   try {
     const r = await api('GET', '/api/admin/voters');
-    if (!r) return alert('Contraseña incorrecta');
+    if (!r || r.error) {
+      return alert('Contraseña incorrecta');
+    }
     $('#loginPanel').style.display = 'none';
     $('#app').style.display = 'block';
     loadData(r);
-  } catch { alert('Contraseña incorrecta'); }
+  } catch (e) {
+    // Si el error es de autenticación, avisar. Si es de red, avisar también.
+    alert('Contraseña incorrecta o error de red.');
+  }
 }
 
 async function api(method, url, body) {
