@@ -1,7 +1,5 @@
 import crypto from 'crypto';
-import {
-  redis, KEYS, getConfig, send, checkAuth, parseBody, withErrorHandler,
-} from '../_lib.js';
+import { redis, KEYS, getConfig, send, checkAuth, parseBody, withErrorHandler } from '../_lib.js';
 
 export default withErrorHandler(async (req, res) => {
   if (!(await checkAuth(req, res))) return;
@@ -22,21 +20,19 @@ export default withErrorHandler(async (req, res) => {
         try { voterData = JSON.parse(v); } catch (e) {}
       }
       return {
-        name: voterData?.name || 'Sin nombre',
+        name: (voterData && voterData.name) ? voterData.name : 'Sin nombre',
         token: token,
         voted: !!votes[token],
-        votedAt: votes[token]?.at || null,
+        votedAt: (votes[token] && votes[token].at) ? votes[token].at : null,
         link: `/v/${token}`,
       };
     });
 
-    return send(res, 200, { deadline: cfg.deadline, voters: list });
+    return send(res, 200, { deadline: cfg?.deadline || new Date().toISOString(), voters: list });
   }
 
   if (req.method === 'POST') {
-    const body = parseBody(req);
-    const names = body.names;
-
+    const { names } = parseBody(req);
     if (!Array.isArray(names) || !names.length) {
       return send(res, 400, { error: 'Sin nombres' });
     }
@@ -48,7 +44,7 @@ export default withErrorHandler(async (req, res) => {
         if (typeof v === 'string') {
           try { data = JSON.parse(v); } catch (e) {}
         }
-        return (data?.name || '').toLowerCase();
+        return (data && data.name) ? data.name.toLowerCase() : '';
       })
     );
 
@@ -57,10 +53,9 @@ export default withErrorHandler(async (req, res) => {
       const name = String(raw).trim();
       if (!name || existingNames.has(name.toLowerCase())) continue;
       
-      // Genera un token único
       const token = crypto.randomBytes(9).toString('base64url');
       
-      // Guardamos como JSON estricto para evitar que Redis lo separe por letras
+      // Guardar como string JSON
       await redis.hset(KEYS.voters, { [token]: JSON.stringify({ name, token }) });
       
       existingNames.add(name.toLowerCase());
