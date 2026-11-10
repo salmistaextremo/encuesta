@@ -63,7 +63,7 @@ let allSongs = [], selected = new Set(), deadline = null;
 (async function boot() {
   try {
     // Llamamos a la ruta correcta de la API
-    const r = await fetch('/api/voter/voters?token=' + encodeURIComponent(token) + '&name=' + encodeURIComponent(voterNameFromUrl));
+    const r = await fetch('/api/voter-info?token=' + encodeURIComponent(token) + '&name=' + encodeURIComponent(voterNameFromUrl));
     
     if (!r.ok) return showError('Enlace inválido o expirado');
     
